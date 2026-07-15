@@ -75,3 +75,4 @@ python analisis_sentimientos.py
 ## 📊 Trazabilidad de Resultados
 Al finalizar, puedes abrir tu gestor de PostgreSQL (como pgAdmin) y consultar la tabla `publicaciones_sismo` y `comentarios_sismo`. 
 Verás que cada texto analizado mantiene su trazabilidad completa: sabrás de qué `red_social` proviene, su `url` original, la métrica de `likes` y `vistas`, y finalmente, su `sentimiento` etiquetado para su posterior graficación o reporte académico.
+
