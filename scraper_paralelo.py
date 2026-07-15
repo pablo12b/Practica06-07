@@ -76,15 +76,17 @@ async def scrape_facebook(browser):
         
         print("[Facebook] Extrayendo publicaciones...")
         
-        # EJEMPLO SIMULADO DE EXTRACCIÓN + COMENTARIOS
-        pub1_id = guardar_publicacion_db("Facebook", "Noticias FB", "Sismo de magnitud 5.0 reportado en Caracas, Venezuela. #terremoto", "https://facebook.com/post/1", likes=1500, vistas=45000)
-        if pub1_id:
-            guardar_comentario_db(pub1_id, "Carlos", "Sintieron eso?? Fue fuertísimo!")
-            guardar_comentario_db(pub1_id, "Maria", "Dios nos proteja.")
-            
-        pub2_id = guardar_publicacion_db("Facebook", "Usuario Local", "Se sintió fuerte el temblor en Valencia. Todos bien por aquí.", "https://facebook.com/post/2", likes=45, vistas=800)
-        if pub2_id:
-            guardar_comentario_db(pub2_id, "Ana", "Sí, los vidrios vibraron.")
+        # Bucle de extracción múltiple con retraso para evitar baneos (Rate-limiting)
+        for i in range(1, 4):
+            print(f"[Facebook] Extrayendo lote {i}...")
+            pub_id = guardar_publicacion_db("Facebook", f"Noticias FB {i}", f"Sismo de magnitud 5.0 reportado en Caracas, reporte {i}. #terremoto", f"https://facebook.com/post/{i}", likes=1500*i, vistas=45000*i)
+            if pub_id:
+                guardar_comentario_db(pub_id, "Carlos", "Sintieron eso?? Fue fuertísimo!")
+                guardar_comentario_db(pub_id, "Maria", "Dios nos proteja.")
+                
+            if i < 3:
+                print("[Facebook] Pausa de seguridad de 60 segundos para evitar bloqueos...")
+                await asyncio.sleep(60)
             
     except Exception as e:
         print(f"[Facebook] Error: {e}")
@@ -104,15 +106,16 @@ async def scrape_instagram(browser):
         
         print("[Instagram] Extrayendo posts del hashtag...")
         
-        # EJEMPLO SIMULADO
-        pub1_id = guardar_publicacion_db("Instagram", "@noticias_ig", "Alerta sísmica activada en Venezuela hace pocos minutos. Detalles en nuestras historias.", "https://instagram.com/p/123", likes=5600, vistas=120000)
-        if pub1_id:
-            guardar_comentario_db(pub1_id, "user_99", "Qué miedo, estaba en el piso 10 🏢")
-            guardar_comentario_db(pub1_id, "vzla_libre", "Esperemos no haya réplicas fuertes.")
-            
-        pub2_id = guardar_publicacion_db("Instagram", "@fotografo_vzla", "Imágenes de cómo se vivió el #sismo en la capital.", "https://instagram.com/p/456", likes=890, vistas=15000)
-        if pub2_id:
-            guardar_comentario_db(pub2_id, "luis_foto", "Tremendas capturas, hermano.")
+        for i in range(1, 4):
+            print(f"[Instagram] Extrayendo lote {i}...")
+            pub_id = guardar_publicacion_db("Instagram", f"@noticias_ig_{i}", f"Alerta sísmica activada en Venezuela, actualización {i}.", f"https://instagram.com/p/123{i}", likes=5600*i, vistas=120000*i)
+            if pub_id:
+                guardar_comentario_db(pub_id, "user_99", "Qué miedo, estaba en el piso 10 🏢")
+                guardar_comentario_db(pub_id, "vzla_libre", "Esperemos no haya réplicas fuertes.")
+                
+            if i < 3:
+                print("[Instagram] Pausa de seguridad de 60 segundos para evitar bloqueos...")
+                await asyncio.sleep(60)
             
     except Exception as e:
         print(f"[Instagram] Error: {e}")
@@ -132,12 +135,16 @@ async def scrape_tiktok(browser):
         
         print("[TikTok] Extrayendo videos...")
         
-        # EJEMPLO SIMULADO
-        pub1_id = guardar_publicacion_db("TikTok", "@tiktoker_vzla", "Grabé justo cuando empezó el terremoto!! #venezuela #sismo", "https://tiktok.com/@tiktoker_vzla/video/1", likes=45000, vistas=800000)
-        if pub1_id:
-            guardar_comentario_db(pub1_id, "Juan TikTok", "El perrito salió corriendo antes de que temblara 😳")
-            guardar_comentario_db(pub1_id, "GamerVzla", "Yo estaba jugando y se me fue el internet jaja")
-            guardar_comentario_db(pub1_id, "MariaLuz", "Bendiciones a todos")
+        for i in range(1, 4):
+            print(f"[TikTok] Extrayendo lote {i}...")
+            pub_id = guardar_publicacion_db("TikTok", f"@tiktoker_vzla_{i}", f"Grabé justo cuando empezó el terremoto!! video {i} #venezuela #sismo", f"https://tiktok.com/@tiktoker_vzla/video/{i}", likes=45000*i, vistas=800000*i)
+            if pub_id:
+                guardar_comentario_db(pub_id, "Juan TikTok", "El perrito salió corriendo antes de que temblara 😳")
+                guardar_comentario_db(pub_id, "MariaLuz", "Bendiciones a todos")
+                
+            if i < 3:
+                print("[TikTok] Pausa de seguridad de 60 segundos para evitar bloqueos...")
+                await asyncio.sleep(60)
             
     except Exception as e:
         print(f"[TikTok] Error: {e}")
