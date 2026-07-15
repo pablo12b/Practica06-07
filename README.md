@@ -24,7 +24,7 @@ Este proyecto simula un sistema integral de **Extracción Concurrente de Datos**
 
 ## 🛠️ Instrucciones de Ejecución (Paso a Paso)
 
-El flujo del proyecto consta de tres pasos lógicos que deben ejecutarse en orden:
+El flujo del proyecto consta de cuatro pasos lógicos que deben ejecutarse en orden:
 
 ### Paso 1: Inicialización de la Base de Datos
 Antes de ejecutar cualquier script, debemos crear las tablas relacionales (`publicaciones_sismo` y `comentarios_sismo`).
@@ -36,7 +36,17 @@ python db_init.py
 
 ---
 
-### Paso 2: Extracción de Datos (I/O-Bound)
+### Paso 2: Autenticación Manual (Anti-CAPTCHA)
+Las redes sociales bloquean la extracción si no tienes una sesión iniciada. Para solucionar esto sin ser detectados como bots, ejecutamos este script:
+
+```bash
+python login_redes.py
+```
+> **Nota:** Se abrirá un navegador visible. Inicia sesión con tus cuentas de prueba manualmente en las 3 pestañas y luego presiona ENTER en la consola. Esto guardará toda tu sesión en la carpeta persistente `playwright_profile` como si fuera un navegador de uso diario, haciendo el scraper indetectable.
+
+---
+
+### Paso 3: Extracción de Datos (I/O-Bound)
 El script de extracción utiliza **Asincronía (`asyncio`)** para ejecutar la recolección de datos en Facebook, Instagram y TikTok de forma concurrente, ya que el web scraping es una tarea limitada por los tiempos de respuesta de internet (I/O-Bound).
 
 ```bash
@@ -47,7 +57,7 @@ Para evitar ser bloqueados por los servidores (Rate-Limiting), el script simula 
 
 ---
 
-### Paso 3: Análisis de Sentimientos Paralelo (CPU-Bound)
+### Paso 4: Análisis de Sentimientos Paralelo (CPU-Bound)
 Una vez que la base de datos esté llena con las publicaciones, procedemos a clasificar los textos en *Positivo, Negativo o Neutral*.
 Dado que el Procesamiento de Lenguaje Natural (NLP) requiere mucho cálculo matemático, es una tarea **limitada por Procesador (CPU-Bound)**. Por ende, este script evoca la librería `multiprocessing` (Paralelismo basado en Procesos) para evadir el GIL de Python y utilizar el 100% de los núcleos físicos del CPU.
 
