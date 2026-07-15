@@ -1,16 +1,11 @@
 import os
 import time
-import multiprocessing
+import concurrent.futures
 import psycopg2
-import re
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
-
-# Diccionario básico de polaridad en español para el análisis local
-# Se usa este enfoque local para evitar llamadas I/O a APIs externas y asegurar que la tarea sea CPU-Bound.
-PALABRAS_POSITIVAS = {'bien', 'excelente', 'gracias', 'afortunadamente', 'seguro', 'proteja', 'libre', 'bendiciones', 'estable', 'recuperando', 'ayuda', 'rescate', 'calma'}
-PALABRAS_NEGATIVAS = {'temblor', 'terremoto', 'miedo', 'fuerte', 'pánico', 'sismo', 'heridos', 'daños', 'peligro', 'triste', 'desastre', 'replica', 'susto', 'terrible', 'gravedad', 'lamentable'}
 
 def inicializar_columnas_db():
     """Agrega las columnas 'sentimiento' a las tablas si no existen."""
@@ -24,8 +19,8 @@ def inicializar_columnas_db():
         )
         cur = conn.cursor()
         
-        cur.execute("ALTER TABLE publicaciones_sismo ADD COLUMN IF NOT EXISTS sentimiento VARCHAR(20);")
-        cur.execute("ALTER TABLE comentarios_sismo ADD COLUMN IF NOT EXISTS sentimiento VARCHAR(20);")
+        cur.execute("ALTER TABLE publicaciones_sismo ADD COLUMN IF NOT EXISTS sentimiento VARCHAR(30);")
+        cur.execute("ALTER TABLE comentarios_sismo ADD COLUMN IF NOT EXISTS sentimiento VARCHAR(30);")
         
         conn.commit()
         cur.close()
@@ -47,12 +42,12 @@ def obtener_textos_db():
         )
         cur = conn.cursor()
         
-        # Obtener publicaciones (id, contenido, 'publicacion')
+        # Obtener publicaciones
         cur.execute("SELECT id, contenido FROM publicaciones_sismo WHERE sentimiento IS NULL;")
         for row in cur.fetchall():
             datos.append((row[0], row[1], 'publicacion'))
             
-        # Obtener comentarios (id, contenido, 'comentario')
+        # Obtener comentarios
         cur.execute("SELECT id, contenido FROM comentarios_sismo WHERE sentimiento IS NULL;")
         for row in cur.fetchall():
             datos.append((row[0], row[1], 'comentario'))
@@ -64,39 +59,68 @@ def obtener_textos_db():
         
     return datos
 
-def analizar_sentimiento_cpu_bound(item):
+def analizar_sentimiento_api_io_bound(item):
     """
-    Función pura de análisis de sentimientos.
-    Intencionalmente CPU-Bound (agrega carga matemática para simular procesamiento complejo de NLP).
+    Función de análisis de sentimientos usando IA en la nube (OpenRouter).
+    Intencionalmente I/O-Bound (espera respuesta de red).
     item es una tupla: (id, texto, tipo)
     Retorna: (id, sentimiento, tipo)
     """
     item_id, texto, tipo = item
     
     if not texto:
-        return (item_id, "Neutral", tipo)
+        return (item_id, "No clasificable", tipo)
         
-    texto_limpio = re.sub(r'[^\w\s]', '', texto.lower())
-    palabras = texto_limpio.split()
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key or "tu_api_key" in api_key:
+        return (item_id, "Error_API_Key", tipo)
+        
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
     
-    score = 0
-    for palabra in palabras:
-        if palabra in PALABRAS_POSITIVAS:
-            score += 1
-        elif palabra in PALABRAS_NEGATIVAS:
-            score -= 1
+    data = {
+        "model": "meta-llama/llama-3.3-70b-instruct",
+        "messages": [
+            {
+                "role": "system", 
+                "content": "Eres un experto analista de sentimientos de redes sociales. Evalúa el sentimiento del texto provisto. Responde ÚNICAMENTE con una de las siguientes cinco categorías exactas: 'Muy positivo', 'Muy negativo', 'Mixto', 'Irónico' o 'No clasificable'. No incluyas puntuación final, explicaciones ni ningún texto adicional."
+            },
+            {
+                "role": "user", 
+                "content": f"Texto a analizar: {texto}"
+            }
+        ],
+        "temperature": 0.0,
+        "max_tokens": 10
+    }
+    
+    for intento in range(3): # Hasta 3 intentos
+        try:
+            response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data, timeout=60)
+            response.raise_for_status()
+            resultado = response.json()
             
-        # Simulador de carga de red neuronal/NLP profundo (CPU-Bound estricto)
-        # Esto justifica matemáticamente el uso de Multiprocessing sobre Threading
-        _carga = sum([i * i for i in range(10000)])
+            respuesta_ia = resultado["choices"][0]["message"]["content"].strip().replace('.', '')
+            respuesta_lower = respuesta_ia.lower()
             
-    if score > 0:
-        sentimiento = "Positivo"
-    elif score < 0:
-        sentimiento = "Negativo"
-    else:
-        sentimiento = "Neutral"
-        
+            # Normalización de la respuesta de la IA a las nuevas categorías
+            if "muy positivo" in respuesta_lower: sentimiento = "Muy positivo"
+            elif "muy negativo" in respuesta_lower: sentimiento = "Muy negativo"
+            elif "mixto" in respuesta_lower: sentimiento = "Mixto"
+            elif "irónico" in respuesta_lower or "ironico" in respuesta_lower: sentimiento = "Irónico"
+            else: sentimiento = "No clasificable"
+            
+            break # Si fue exitoso, salir del bucle de reintentos
+            
+        except Exception as e:
+            if intento == 2: # Si es el último intento y falla
+                print(f"[API Error] Falló el análisis para ID {item_id} tras 3 intentos: {e}")
+                sentimiento = "No clasificable" # Fallback en caso de timeout total
+            else:
+                time.sleep(2) # Pequeña pausa antes de reintentar
+                
     return (item_id, sentimiento, tipo)
 
 def actualizar_sentimientos_db(resultados):
@@ -118,6 +142,8 @@ def actualizar_sentimientos_db(resultados):
         coms_actualizados = 0
         
         for item_id, sentimiento, tipo in resultados:
+            if sentimiento == "Error_API_Key": continue
+            
             if tipo == 'publicacion':
                 cur.execute("UPDATE publicaciones_sismo SET sentimiento = %s WHERE id = %s", (sentimiento, item_id))
                 pubs_actualizadas += 1
@@ -133,7 +159,7 @@ def actualizar_sentimientos_db(resultados):
         print(f"[ERROR DB] No se pudieron guardar los resultados: {e}")
 
 if __name__ == '__main__':
-    print("=== INICIANDO ANÁLISIS DE SENTIMIENTOS PARALELO ===")
+    print("=== INICIANDO ANÁLISIS DE SENTIMIENTOS PARALELO (I/O BOUND) ===")
     
     # 1. Preparar Base de Datos
     inicializar_columnas_db()
@@ -145,18 +171,22 @@ if __name__ == '__main__':
     if datos_a_procesar:
         inicio = time.perf_counter()
         
-        # 3. PARALELISMO BASADO EN PROCESOS (Multiprocessing)
-        # Usamos Pool para distribuir los textos entre todos los núcleos disponibles.
-        # Justificación: El NLP (tokenización y cálculos) es puramente CPU-Bound.
-        num_nucleos = multiprocessing.cpu_count()
-        print(f"Distribuyendo carga NLP en {num_nucleos} núcleos lógicos...")
+        # 3. PARALELISMO BASADO EN HILOS (Threading)
+        # Usamos ThreadPoolExecutor porque enviar datos a una API web y esperar la respuesta es una tarea I/O-Bound.
+        max_hilos = 10 # 10 hilos para no saturar OpenRouter
+        print(f"Lanzando {max_hilos} hilos concurrentes para peticiones a la API de OpenRouter (Llama 3.3)...")
         
-        with multiprocessing.Pool(processes=num_nucleos) as pool:
-            # map bloquea hasta que todos los procesos hijos terminen de analizar
-            resultados_clasificacion = pool.map(analizar_sentimiento_cpu_bound, datos_a_procesar)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_hilos) as executor:
+            # map asigna los textos a los hilos de trabajo y espera los resultados
+            resultados_clasificacion = list(executor.map(analizar_sentimiento_api_io_bound, datos_a_procesar))
             
         fin = time.perf_counter()
-        print(f"Análisis concurrente completado en {fin - inicio:.2f} segundos.")
+        print(f"Análisis IA concurrente completado en {fin - inicio:.2f} segundos.")
+        
+        # Revisión si faltó la API Key
+        if any(res[1] == "Error_API_Key" for res in resultados_clasificacion):
+            print("[ADVERTENCIA] No has configurado tu OPENROUTER_API_KEY en el archivo .env.")
+            print("Por favor agrégala y vuelve a correr el script.")
         
         # 4. Guardar resultados en el almacenamiento relacional
         actualizar_sentimientos_db(resultados_clasificacion)
