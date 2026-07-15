@@ -194,3 +194,4 @@ if __name__ == '__main__':
         print("No hay datos nuevos para procesar. Ejecuta el scraper primero.")
         
     print("=== PROCESO FINALIZADO ===")
+
