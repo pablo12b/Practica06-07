@@ -158,7 +158,7 @@ def actualizar_sentimientos_db(resultados):
     except Exception as e:
         print(f"[ERROR DB] No se pudieron guardar los resultados: {e}")
 
-if __name__ == '__main__':
+def ejecutar_analisis_completo():
     print("=== INICIANDO ANÁLISIS DE SENTIMIENTOS PARALELO (I/O BOUND) ===")
     
     # 1. Preparar Base de Datos
@@ -168,30 +168,31 @@ if __name__ == '__main__':
     datos_a_procesar = obtener_textos_db()
     print(f"Textos pendientes de análisis: {len(datos_a_procesar)}")
     
-    if datos_a_procesar:
-        inicio = time.perf_counter()
+    if not datos_a_procesar:
+        print("No hay datos nuevos para procesar.")
+        return 0
         
-        # 3. PARALELISMO BASADO EN HILOS (Threading)
-        # Usamos ThreadPoolExecutor porque enviar datos a una API web y esperar la respuesta es una tarea I/O-Bound.
-        max_hilos = 10 # 10 hilos para no saturar OpenRouter
-        print(f"Lanzando {max_hilos} hilos concurrentes para peticiones a la API de OpenRouter (Llama 3.3)...")
+    inicio = time.perf_counter()
+    
+    # 3. PARALELISMO BASADO EN HILOS (Threading)
+    max_hilos = 10
+    print(f"Lanzando {max_hilos} hilos concurrentes para peticiones a la API de OpenRouter (Llama 3.3)...")
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_hilos) as executor:
+        resultados_clasificacion = list(executor.map(analizar_sentimiento_api_io_bound, datos_a_procesar))
         
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_hilos) as executor:
-            # map asigna los textos a los hilos de trabajo y espera los resultados
-            resultados_clasificacion = list(executor.map(analizar_sentimiento_api_io_bound, datos_a_procesar))
-            
-        fin = time.perf_counter()
-        print(f"Análisis IA concurrente completado en {fin - inicio:.2f} segundos.")
-        
-        # Revisión si faltó la API Key
-        if any(res[1] == "Error_API_Key" for res in resultados_clasificacion):
-            print("[ADVERTENCIA] No has configurado tu OPENROUTER_API_KEY en el archivo .env.")
-            print("Por favor agrégala y vuelve a correr el script.")
-        
-        # 4. Guardar resultados en el almacenamiento relacional
-        actualizar_sentimientos_db(resultados_clasificacion)
-    else:
-        print("No hay datos nuevos para procesar. Ejecuta el scraper primero.")
-        
-    print("=== PROCESO FINALIZADO ===")
+    fin = time.perf_counter()
+    print(f"Análisis IA concurrente completado en {fin - inicio:.2f} segundos.")
+    
+    if any(res[1] == "Error_API_Key" for res in resultados_clasificacion):
+        print("[ADVERTENCIA] No has configurado tu OPENROUTER_API_KEY en el archivo .env.")
+    
+    # 4. Guardar resultados en el almacenamiento relacional
+    actualizar_sentimientos_db(resultados_clasificacion)
+    
+    print("=== PROCESO DE ANÁLISIS FINALIZADO ===")
+    return len(resultados_clasificacion)
+
+if __name__ == '__main__':
+    ejecutar_analisis_completo()
 

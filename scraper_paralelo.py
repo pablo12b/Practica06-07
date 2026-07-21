@@ -297,34 +297,95 @@ async def scrape_tiktok(context):
         await page.close()
 
 
-async def main():
-    print("=== INICIANDO SCRAPING PARALELO (20+ POSTS REALES POR PLATAFORMA) ===")
+async def scrape_reddit(context, keywords):
+    print("[Reddit] Iniciando proceso de scraping interactivo...")
+    page = await context.new_page()
+    try:
+        procesados = 0
+        for keyword in keywords:
+            if procesados >= 20: break
+            print(f"[Reddit] Buscando temas sobre: {keyword}")
+            # Reddit search URL
+            await page.goto(f"https://www.reddit.com/search/?q={keyword}&type=link", timeout=60000, wait_until="domcontentloaded")
+            await page.wait_for_timeout(5000)
+            
+            # Buscar enlaces a posts
+            links = await page.evaluate('''() => {
+                return Array.from(document.querySelectorAll('a[href^="/r/"]'))
+                            .map(a => a.href)
+                            .filter(href => href.includes('/comments/'));
+            }''')
+            
+            links = list(set(links)) # Evitar duplicados
+            
+            for link in links:
+                if procesados >= 20: break
+                try:
+                    await page.goto(link, timeout=60000, wait_until="domcontentloaded")
+                    await page.wait_for_timeout(4000)
+                    
+                    datos_extraidos = await page.evaluate('''() => {
+                        let texts = Array.from(document.querySelectorAll('h1, p, div[data-testid="post-container"], div[data-testid="comment"]'))
+                                    .map(el => el.innerText.trim())
+                                    .filter(t => t.length > 20);
+                        return Array.from(new Set(texts));
+                    }''')
+                    
+                    if datos_extraidos:
+                        datos_extraidos.sort(key=len, reverse=True)
+                        post_text = datos_extraidos[0]
+                        
+                        url_real = page.url
+                        pub_id = guardar_publicacion_db("Reddit", "Redditor", post_text[:250], url_real, likes=150, vistas=800)
+                        
+                        if pub_id and len(datos_extraidos) > 1:
+                            for c_text in datos_extraidos[1:5]: # Guardar algunos comentarios
+                                guardar_comentario_db(pub_id, "Comentarista", c_text[:150])
+                        
+                        procesados += 1
+                        print(f"[Reddit] Publicación {procesados}/20 extraída.")
+                except Exception as e:
+                    print(f"[Reddit] Error al procesar post individual: {e}")
+                
+                await asyncio.sleep(3)
+    except Exception as e:
+        print(f"[Reddit] Error: {e}")
+    finally:
+        await page.close()
+
+async def ejecutar_scraping_completo(query):
+    print(f"=== INICIANDO SCRAPING PARALELO PARA: '{query}' ===")
+    
+    # Generar keywords base para la consulta
+    keywords_fb_tt = [query]
+    # Limpiar hashtag para Instagram (sin espacios)
+    keywords_ig = [query.replace(" ", "")]
     
     async with async_playwright() as p:
         print("Lanzando contexto persistente (playwright_profile)...")
         try:
             context = await p.chromium.launch_persistent_context(
                 user_data_dir="playwright_profile",
-                headless=False,
+                headless=True, # Usaremos Headless para la app web
                 channel="msedge",
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )
         except Exception:
             context = await p.chromium.launch_persistent_context(
                 user_data_dir="playwright_profile",
-                headless=False,
+                headless=True,
                 channel="chrome",
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )
             
-        # Inyectar anti-bot genérico
         await context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         
-        # Ejecutar las tres extracciones pesadas simultáneamente (Concurrencia)
+        # Ejecutar las cuatro extracciones simultáneamente (Concurrencia)
         await asyncio.gather(
-            scrape_facebook(context),
-            scrape_instagram(context),
-            scrape_tiktok(context)
+            scrape_facebook(context, keywords_fb_tt),
+            scrape_instagram(context, keywords_ig),
+            scrape_tiktok(context, keywords_fb_tt),
+            scrape_reddit(context, keywords_fb_tt)
         )
         
         await context.close()
@@ -332,4 +393,5 @@ async def main():
     print("=== SCRAPING PARALELO FINALIZADO ===")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Prueba local
+    asyncio.run(ejecutar_scraping_completo("sismo venezuela"))
