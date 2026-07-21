@@ -1,20 +1,29 @@
-# Práctica de Laboratorio 06: Extracción y Análisis Paralelo de Redes Sociales
+# Proyecto Final: Pipeline Concurrente de Extracción y Análisis de Redes Sociales
 
-Este proyecto simula un sistema integral de **Extracción Concurrente de Datos** (Web Scraping) desde múltiples redes sociales y su posterior **Análisis de Sentimientos en Paralelo**, utilizando PostgreSQL como sistema gestor de base de datos relacional para garantizar la trazabilidad de la información.
+Este proyecto presenta una **Solución Web Integral** que aplica técnicas de Computación Paralela e Inteligencia Artificial para la extracción masiva de datos (Web Scraping) desde cuatro redes sociales simultáneamente, seguida de una clasificación avanzada de sentimientos utilizando Modelos de Lenguaje Grande (LLMs) y la generación de *Storytelling*.
 
-## 🚀 Requisitos Previos
+## 🚀 Arquitectura y Tecnologías
+- **Extracción Concurrente (I/O-Bound):** `asyncio` con Playwright para extraer datos de Facebook, Instagram, TikTok y **Reddit** en paralelo.
+- **Análisis de Sentimientos Paralelo (I/O-Bound):** `ThreadPoolExecutor` para lanzar peticiones concurrentes a la API de OpenRouter (Llama 3.3 70B Instruct).
+- **Aplicación Web:** `Streamlit` para la interfaz de usuario y `Plotly` para la visualización de datos interactiva.
+- **Base de Datos:** `PostgreSQL` para garantizar la trazabilidad de la información (Esquema relacional).
 
-1.  **PostgreSQL:** Debes tener un servidor PostgreSQL ejecutándose.
-2.  **Variables de Entorno:** Debes configurar tu archivo `.env` en la raíz del proyecto con tus credenciales de base de datos:
+---
+
+## ⚙️ Requisitos Previos
+
+1.  **PostgreSQL:** Debes tener un servidor PostgreSQL local o en la nube ejecutándose.
+2.  **API Key de OpenRouter:** Regístrate en [OpenRouter.ai](https://openrouter.ai/) y genera una API Key para utilizar el modelo Llama 3.3.
+3.  **Variables de Entorno:** Configura tu archivo `.env` en la raíz del proyecto:
     ```env
     DB_HOST=localhost
     DB_PORT=5432
     DB_NAME=tu_base_datos
     DB_USER=tu_usuario
     DB_PASSWORD=tu_contraseña
+    OPENROUTER_API_KEY=tu_api_key_aqui
     ```
-3.  **Dependencias de Python:**
-    Instalar los requerimientos ejecutando:
+4.  **Dependencias de Python:** Instala los requerimientos ejecutando:
     ```bash
     pip install -r requirements.txt
     playwright install chromium
@@ -22,57 +31,43 @@ Este proyecto simula un sistema integral de **Extracción Concurrente de Datos**
 
 ---
 
-## 🛠️ Instrucciones de Ejecución (Paso a Paso)
+## 🛠️ Instrucciones de Ejecución
 
-El flujo del proyecto consta de cuatro pasos lógicos que deben ejecutarse en orden:
+El flujo del proyecto se ha simplificado y unificado gracias a la aplicación web. Sigue estos tres pasos para inicializar el sistema:
 
 ### Paso 1: Inicialización de la Base de Datos
-Antes de ejecutar cualquier script, debemos crear las tablas relacionales (`publicaciones_sismo` y `comentarios_sismo`).
-
+Antes de ejecutar la aplicación, debemos crear las tablas relacionales. Este paso borrará tablas anteriores y creará el esquema limpio.
 ```bash
 python db_init.py
 ```
-> **Nota:** Este script borrará las tablas anteriores (si existen) y creará el esquema limpio para la práctica.
-
----
 
 ### Paso 2: Autenticación Manual (Anti-CAPTCHA)
-Las redes sociales bloquean la extracción si no tienes una sesión iniciada. Para solucionar esto sin ser detectados como bots, ejecutamos este script:
-
+Las redes sociales (especialmente Facebook e Instagram) bloquean la extracción agresiva. Para evadir esto, ejecutaremos una única vez el script de login:
 ```bash
 python login_redes.py
 ```
-> **Nota:** Se abrirá un navegador visible. Inicia sesión con tus cuentas de prueba manualmente en las 3 pestañas y luego presiona ENTER en la consola. Esto guardará toda tu sesión en la carpeta persistente `playwright_profile` como si fuera un navegador de uso diario, haciendo el scraper indetectable.
+> **Instrucción:** Se abrirá un navegador. Inicia sesión manualmente con tus cuentas en las pestañas que se abran. Al terminar, presiona ENTER en la consola. Esto guardará tu sesión en la carpeta `playwright_profile`, volviendo al scraper indetectable.
 
----
-
-### Paso 3: Extracción de Datos (I/O-Bound)
-El script de extracción utiliza **Asincronía (`asyncio`)** para ejecutar la recolección de datos en Facebook, Instagram y TikTok de forma concurrente, ya que el web scraping es una tarea limitada por los tiempos de respuesta de internet (I/O-Bound).
-
+### Paso 3: Ejecución de la Aplicación Web (Streamlit)
+Levanta la interfaz gráfica que orquesta todos los procesos paralelos:
 ```bash
-python scraper_paralelo.py
+streamlit run app.py
 ```
-**Mecanismo Anti-Baneos:** 
-Para evitar ser bloqueados por los servidores (Rate-Limiting), el script simula la extracción por lotes. Entre cada lote extraído, se introdujo intencionalmente un retraso asíncrono de **60 segundos** (`await asyncio.sleep(60)`). Al usar concurrencia, las 3 redes sociales hacen sus pausas en paralelo sin bloquearse entre sí, optimizando el tiempo total.
+> **Flujo en la Web:**
+> 1. Abre el navegador en la URL indicada por Streamlit (usualmente `http://localhost:8501`).
+> 2. En el panel izquierdo, ingresa tu término de búsqueda (Ej. *"Sismo Venezuela"*).
+> 3. Haz click en **"Ejecutar Pipeline Completo"**.
+> 4. Observa cómo el Backend extrae los datos de las 4 redes en paralelo y luego lanza los 10 hilos concurrentes para consultar a Llama 3.3.
+> 5. Al finalizar, la web dibujará el Tablero de Control y Llama 3.3 generará un párrafo de *Storytelling* explicando los hallazgos.
 
 ---
 
-### Paso 4: Análisis de Sentimientos Paralelo (CPU-Bound)
-Una vez que la base de datos esté llena con las publicaciones, procedemos a clasificar los textos en *Positivo, Negativo o Neutral*.
-Dado que el Procesamiento de Lenguaje Natural (NLP) requiere mucho cálculo matemático, es una tarea **limitada por Procesador (CPU-Bound)**. Por ende, este script evoca la librería `multiprocessing` (Paralelismo basado en Procesos) para evadir el GIL de Python y utilizar el 100% de los núcleos físicos del CPU.
+## 📊 Clasificación y Visualización (Resultados)
+A diferencia de prácticas anteriores que usaban diccionarios locales limitados, este proyecto utiliza Inteligencia Artificial de última generación para clasificar semánticamente cada comentario en una de 5 categorías exigidas:
+- **Muy positivo**
+- **Positivo/Neutral/Mixto** (según el contexto)
+- **Muy negativo**
+- **Irónico**
+- **No clasificable**
 
-```bash
-python analisis_sentimientos.py
-```
-**Lo que hace este script:**
-1. Altera la base de datos mágicamente para agregar la columna `sentimiento`.
-2. Lee todos los textos pendientes.
-3. Divide los textos en *lotes (chunks)* y los procesa en paralelo.
-4. Actualiza la base de datos con los resultados conservando toda la trazabilidad.
-
----
-
-## 📊 Trazabilidad de Resultados
-Al finalizar, puedes abrir tu gestor de PostgreSQL (como pgAdmin) y consultar la tabla `publicaciones_sismo` y `comentarios_sismo`. 
-Verás que cada texto analizado mantiene su trazabilidad completa: sabrás de qué `red_social` proviene, su `url` original, la métrica de `likes` y `vistas`, y finalmente, su `sentimiento` etiquetado para su posterior graficación o reporte académico.
-
+La aplicación web te permitirá explorar estos resultados de manera agrupada a través de gráficos de Plotly y filtros de tabla en tiempo real, evidenciando el poder de la Computación Paralela combinada con la Inteligencia Artificial.
