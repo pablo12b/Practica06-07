@@ -55,11 +55,12 @@ def guardar_comentario_db(publicacion_id, autor, contenido):
     except Exception as e:
         print(f"    -> Error BD (Comentario): {e}")
 
-async def scrape_facebook(context):
-    print("[Facebook] Iniciando proceso de scraping interactivo...")
+async def scrape_facebook(context, keywords):
+    keyword = keywords[0] if keywords else "terremoto venezuela"
+    print(f"[Facebook] Iniciando proceso de scraping interactivo para: {keyword}...")
     page = await context.new_page()
     try:
-        await page.goto("https://www.facebook.com/search/posts/?q=terremoto%20venezuela", timeout=60000, wait_until="domcontentloaded")
+        await page.goto(f"https://www.facebook.com/search/posts/?q={keyword}", timeout=60000, wait_until="domcontentloaded")
         await page.wait_for_timeout(5000)
         
         print("[Facebook] Analizando el muro para abrir publicaciones en grande...")
@@ -180,11 +181,12 @@ async def scrape_facebook(context):
         await page.close()
 
 
-async def scrape_instagram(context):
-    print("[Instagram] Iniciando proceso de scraping interactivo...")
+async def scrape_instagram(context, keywords):
+    keyword = keywords[0] if keywords else "terremotovenezuela"
+    print(f"[Instagram] Iniciando proceso de scraping interactivo para: {keyword}...")
     page = await context.new_page()
     try:
-        await page.goto("https://www.instagram.com/explore/tags/terremotovenezuela/", timeout=60000, wait_until="domcontentloaded")
+        await page.goto(f"https://www.instagram.com/explore/tags/{keyword}/", timeout=60000, wait_until="domcontentloaded")
         await page.wait_for_timeout(5000)
         
         print("[Instagram] Haciendo clic en la primera publicación para abrir el modal...")
@@ -233,11 +235,12 @@ async def scrape_instagram(context):
         await page.close()
 
 
-async def scrape_tiktok(context):
-    print("[TikTok] Iniciando proceso de scraping interactivo...")
+async def scrape_tiktok(context, keywords):
+    keyword = keywords[0] if keywords else "terremoto venezuela"
+    print(f"[TikTok] Iniciando proceso de scraping interactivo para: {keyword}...")
     page = await context.new_page()
     try:
-        await page.goto("https://www.tiktok.com/search/video?q=terremoto%20venezuela", timeout=60000, wait_until="domcontentloaded")
+        await page.goto(f"https://www.tiktok.com/search/video?q={keyword}", timeout=60000, wait_until="domcontentloaded")
         await page.wait_for_timeout(5000)
         
         print("[TikTok] Seleccionando el primer video...")
@@ -366,7 +369,7 @@ async def ejecutar_scraping_completo(query):
         try:
             context = await p.chromium.launch_persistent_context(
                 user_data_dir="playwright_profile",
-                headless=True, # Usaremos Headless para la app web
+                headless=False, # Usaremos Headless para la app web
                 channel="msedge",
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )
